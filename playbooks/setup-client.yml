@@ -1,0 +1,55 @@
+---
+- name: Configure WireGuard with packet forwarding
+  hosts: wireguard_clients
+  become: true
+  vars:
+    wireguard_interface: wg0
+    wireguard_address: "10.0.0.2/24"  # Change to your desired WireGuard IP
+    wireguard_port: 51820
+    wireguard_private_key: "{{ lookup('file', 'client_private_key') }}"  # Path to private key file
+    wireguard_server_public_key: "{{ lookup('file', 'server_public_key') }}"  # Path to client public key file
+    wireguard_server_ip: "{{ hostvars['wireguard-server']['ansible_host'] }}"  # IP of the server
+    
+  tasks:
+    - name: Install WireGuard
+      package:
+        name: wireguard
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Check if WireGuard module is loaded
+      shell: lsmod | grep wireguard
+      register: wireguard_module
+      ignore_errors: true
+      changed_when: false
+    
+    - name: Load WireGuard module
+      shell: modprobe wireguard
+      when: wireguard_module.rc != 0
+    
+    - name: Create WireGuard configuration directory
+      file:
+        path: /etc/wireguard
+        state: directory
+        mode: '0700'
+    
+    - name: Configure WireGuard interface
+      template:
+        src: wg0-client.conf.j2
+        dest: /etc/wireguard/{{ wireguard_interface }}.conf
+        owner: root
+        group: root
+        mode: '0600'
+      notify: Restart WireGuard
+
+    - name: Enable and start WireGuard service
+      service:
+        name: "wg-quick@{{ wireguard_interface }}"
+        enabled: yes
+        state: started
+      
+  handlers:
+    - name: Restart WireGuard
+      service:
+        name: "wg-quick@{{ wireguard_interface }}"
+        state: restarted

@@ -1,0 +1,9 @@
+[Interface]
+PrivateKey = {{ wireguard_private_key }}
+Address = 10.0.0.2/32
+DNS = 9.9.9.9
+
+[Peer]
+PublicKey = {{ wireguard_server_public_key }}
+Endpoint = {{ wireguard_server_ip }}:{{ wireguard_port }}
+PersistentKeepalive = 25

@@ -1,0 +1,53 @@
+---
+- name: Disable default Ubuntu services and packages
+  hosts: wireguard_servers
+  become: true
+
+  tasks:
+
+    - name: Disable and stop snapd
+      systemd:
+        name: snapd
+        enabled: no
+        state: stopped
+
+    - name: Remove snapd and related packages
+      apt:
+        name:
+          - snapd
+          - lxd
+          - ubuntu-core-launcher
+        state: absent
+        purge: yes
+        autoremove: yes
+        update_cache: yes
+
+    - name: Disable and stop apport (error reporting)
+      systemd:
+        name: apport
+        enabled: no
+        state: stopped
+      ignore_errors: true 
+      
+    - name: Disable motd-news (message of the day updates)
+      lineinfile:
+        path: /etc/default/motd-news
+        regexp: '^ENABLED='
+        line: 'ENABLED=0'
+        create: yes
+
+    - name: Disable motd update scripts
+      file:
+        path: "{{ item }}"
+        mode: "0644"
+        state: absent
+      loop:
+        - /etc/update-motd.d/10-help-text
+        - /etc/update-motd.d/50-motd-news
+        - /etc/update-motd.d/80-livepatch
+        - /etc/update-motd.d/90-updates-available
+        - /etc/update-motd.d/91-release-upgrade
+
+    - name: Clean apt cache
+      apt:
+        autoclean: yes

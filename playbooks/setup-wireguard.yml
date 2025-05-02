@@ -1,0 +1,99 @@
+---
+- name: Configure WireGuard with packet forwarding
+  hosts: wireguard_servers
+  become: true
+  vars:
+    wireguard_interface: wg0
+    wireguard_address: "10.0.0.1/24"  # Change to your desired WireGuard IP
+    wireguard_port: 51820
+    wireguard_private_key: "{{ lookup('file', 'server_private_key') }}"  # Path to private key file
+    wireguard_client_public_key: "{{ lookup('file', 'client_public_key') }}"  # Path to client public key file
+    
+  tasks:
+    - name: Install WireGuard
+      package:
+        name: wireguard
+        state: present
+
+    - name: Check if WireGuard module is loaded
+      shell: lsmod | grep wireguard
+      register: wireguard_module
+      ignore_errors: true
+      changed_when: false
+    
+    - name: Load WireGuard module
+      shell: modprobe wireguard
+      when: wireguard_module.rc != 0
+    
+    - name: Enable IP forwarding in sysctl
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: "1"
+        state: present
+        reload: yes
+    
+    - name: Create WireGuard configuration directory
+      file:
+        path: /etc/wireguard
+        state: directory
+        mode: '0700'
+    
+    - name: Configure WireGuard interface
+      template:
+        src: wg0.conf.j2
+        dest: /etc/wireguard/{{ wireguard_interface }}.conf
+        owner: root
+        group: root
+        mode: '0600'
+      notify: Restart WireGuard
+
+    - name: Configure firewall for forwarding
+      block:
+        - name: Enable UFW forwarding
+          lineinfile:
+            path: /etc/default/ufw
+            regexp: '^DEFAULT_FORWARD_POLICY='
+            line: 'DEFAULT_FORWARD_POLICY="ACCEPT"'
+          notify: Reload UFW
+          when: ansible_os_family == "Debian"
+
+        - name: Configure iptables for NAT
+          iptables:
+            table: nat
+            chain: POSTROUTING
+            out_interface: "{{ ansible_default_ipv4.interface }}"
+            jump: MASQUERADE
+            comment: "WireGuard NAT"
+          register: iptables_nat
+          
+        - name: Save iptables rules
+          shell: "{{ item }}"
+          with_items:
+            - iptables-save > /etc/iptables/rules.v4
+          when: iptables_nat.changed and ansible_os_family == "Debian"
+          ignore_errors: true
+        
+        - name: Save iptables rules (RHEL/CentOS)
+          shell: "{{ item }}"
+          with_items:
+            - iptables-save > /etc/sysconfig/iptables
+          when: iptables_nat.changed and ansible_os_family == "RedHat"
+          ignore_errors: true
+
+    - name: Enable and start WireGuard service
+      service:
+        name: "wg-quick@{{ wireguard_interface }}"
+        enabled: yes
+        state: started
+      
+  handlers:
+    - name: Restart WireGuard
+      service:
+        name: "wg-quick@{{ wireguard_interface }}"
+        state: restarted
+
+    - name: Reload UFW
+      service:
+        name: ufw
+        state: reloaded
+      when: ansible_os_family == "Debian"

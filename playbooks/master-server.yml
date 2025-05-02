@@ -1,0 +1,4 @@
+---
+- import_playbook: disable-default-ubuntu.yml
+- import_playbook: Install_setup_ufw.yml
+- import_playbook: setup-wireguard.yml
