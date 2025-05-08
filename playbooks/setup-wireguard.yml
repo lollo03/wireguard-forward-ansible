@@ -47,39 +47,6 @@
         mode: '0600'
       notify: Restart WireGuard
 
-    - name: Configure firewall for forwarding
-      block:
-        - name: Enable UFW forwarding
-          lineinfile:
-            path: /etc/default/ufw
-            regexp: '^DEFAULT_FORWARD_POLICY='
-            line: 'DEFAULT_FORWARD_POLICY="ACCEPT"'
-          notify: Reload UFW
-          when: ansible_os_family == "Debian"
-
-        - name: Configure iptables for NAT
-          iptables:
-            table: nat
-            chain: POSTROUTING
-            out_interface: "{{ ansible_default_ipv4.interface }}"
-            jump: MASQUERADE
-            comment: "WireGuard NAT"
-          register: iptables_nat
-          
-        - name: Save iptables rules
-          shell: "{{ item }}"
-          with_items:
-            - iptables-save > /etc/iptables/rules.v4
-          when: iptables_nat.changed and ansible_os_family == "Debian"
-          ignore_errors: true
-        
-        - name: Save iptables rules (RHEL/CentOS)
-          shell: "{{ item }}"
-          with_items:
-            - iptables-save > /etc/sysconfig/iptables
-          when: iptables_nat.changed and ansible_os_family == "RedHat"
-          ignore_errors: true
-
     - name: Enable and start WireGuard service
       service:
         name: "wg-quick@{{ wireguard_interface }}"
@@ -91,9 +58,3 @@
       service:
         name: "wg-quick@{{ wireguard_interface }}"
         state: restarted
-
-    - name: Reload UFW
-      service:
-        name: ufw
-        state: reloaded
-      when: ansible_os_family == "Debian"

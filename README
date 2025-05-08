@@ -29,16 +29,22 @@ This repository includes:
 
 You can use the included `setup-client.yml` playbook or manually install WireGuard on your client system and use a configuration like:
 
+Tip: if you need to generate the keys for your client you can use:
+
+```bash
+wg genkey | tee client_private_key | wg pubkey > client_public_key
+```
+
 ```ini
 [Interface]
 PrivateKey = <CLIENT_PRIVATE_KEY>
 Address = 10.0.0.2/32
-DNS = 1.1.1.1
 
 [Peer]
 PublicKey = <SERVER_PUBLIC_KEY>
 Endpoint = <SERVER_PUBLIC_IP>:51820
 PersistentKeepalive = 25
+AllowedIPs = 10.0.0.1
 ```
 
 > Replace the placeholders with your actual key and server info.
